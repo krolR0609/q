@@ -11,6 +11,18 @@ import (
 	"github.com/krolR0609/q/internal/services/systeminfo"
 )
 
+type OpenAIResponse struct {
+	Choices []Choice `json:"choices"`
+}
+
+type Choice struct {
+	Message Message `json:"message"`
+}
+
+type Message struct {
+	Content string `json:"content"`
+}
+
 type Provider struct {
 	httpClient *http.Client
 	config     *config.Config
@@ -53,7 +65,7 @@ func (p *Provider) Ask(prompt string) (string, error) {
 			},
 			{
 				"role":    "system",
-				"content": fmt.Sprintf("Infomation about system (use it to make response more relative to the user): %s", systemInfoJson),
+				"content": fmt.Sprintf("Information about system (use it to make response more relative to the user): %s", systemInfoJson),
 			},
 			{
 				"role":    "user",
@@ -73,31 +85,18 @@ func (p *Provider) Ask(prompt string) (string, error) {
 	}
 	defer response.Body.Close()
 
-	rDict := map[string]interface{}{}
-	decoder := json.NewDecoder(response.Body)
-	decoder.Decode(&rDict)
-	choices, ok := rDict["choices"].([]interface{})
-	if !ok {
-		panic("choices is not a slice")
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API request failed with status %d", response.StatusCode)
 	}
 
-	// Get first choice
-	firstChoice, ok := choices[0].(map[string]interface{})
-	if !ok {
-		panic("first choice is not a map")
+	var resp OpenAIResponse
+	if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
+		return "", err
 	}
 
-	// Get message
-	message, ok := firstChoice["message"].(map[string]interface{})
-	if !ok {
-		panic("message is not a map")
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices in response")
 	}
 
-	// Get content
-	content, ok := message["content"].(string)
-	if !ok {
-		panic("content is not a string")
-	}
-
-	return content, nil
+	return resp.Choices[0].Message.Content, nil
 }

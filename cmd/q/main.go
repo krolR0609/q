@@ -12,11 +12,11 @@ import (
 func main() {
 	args := utils.ParseArgs(os.Args[1:])
 
-	config, err := config.LoadConfig()
+	cfg, err := config.LoadConfig()
 	if err != nil {
-		fmt.Println("Unable to load config")
+		fmt.Println("Unable to load config:", err)
 		return
 	}
-	app := app.NewApp(config)
+	app := app.NewApp(cfg)
 	app.Run(args)
 }

@@ -13,27 +13,31 @@ type Args struct {
 
 func ParseArgs(args []string) Args {
 	dict := make(map[string]string)
-	current := ""
-	dict[current] = current
+	var nonFlags []string
+	currentFlag := ""
 	for _, arg := range args {
-		if arg[0] == '-' {
-			dict[arg] = ""
-			current = arg
+		if len(arg) > 0 && arg[0] == '-' {
+			currentFlag = arg
+			dict[currentFlag] = ""
 		} else {
-			dict[current] += strings.TrimSpace(arg) + " "
+			if currentFlag == "" {
+				nonFlags = append(nonFlags, arg)
+			} else {
+				dict[currentFlag] += arg + " "
+			}
 		}
 	}
 
-	prompt, ok := dict["-r"]
-	if !ok {
-		prompt, _ = dict[""]
+	prompt := strings.Join(nonFlags, " ")
+	if p, ok := dict["-r"]; ok {
+		prompt = strings.TrimSpace(p)
 	}
 
-	model := Args{
+	parsedArgs := Args{
 		Prompt: strings.TrimSpace(prompt),
 	}
 
-	return model
+	return parsedArgs
 }
 
 func ShowLoader() context.CancelFunc {
