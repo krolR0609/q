@@ -1,8 +1,11 @@
 package app
 
 import (
+	"bufio"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/krolR0609/q/config"
 	"github.com/krolR0609/q/internal/api/openai"
@@ -33,14 +36,45 @@ func (a *App) InitServices() {
 func (a *App) Run(args utils.Args) {
 	a.InitServices()
 
-	cancel := utils.ShowLoader()
-	result, err := a.ai.Ask(args.Prompt)
-	cancel()
+	if args.IsChat {
+		a.runChatMode()
+	} else {
+		a.runSingleQuery(args.Prompt)
+	}
+}
 
+func (a *App) runSingleQuery(prompt string) {
+	cancel := utils.ShowLoader()
+	_, err := a.ai.Ask(prompt, func() { cancel() })
 	if err != nil {
+		cancel()
 		fmt.Println(err)
 		return
 	}
+}
 
-	fmt.Println(result)
+func (a *App) runChatMode() {
+	scanner := bufio.NewScanner(os.Stdin)
+	fmt.Println("Entering chat mode. Type 'exit' to quit.")
+	for {
+		fmt.Print("q> ")
+		if !scanner.Scan() {
+			break
+		}
+		input := strings.TrimSpace(scanner.Text())
+		if input == "exit" {
+			break
+		}
+		if input == "" {
+			continue
+		}
+		_, err := a.ai.Ask(input, nil)
+		if err != nil {
+			fmt.Println("Error:", err)
+			continue
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Println("Error reading input:", err)
+	}
 }

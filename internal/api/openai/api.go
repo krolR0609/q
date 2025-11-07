@@ -1,11 +1,14 @@
 package openai
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 
 	"github.com/krolR0609/q/config"
 	"github.com/krolR0609/q/internal/services/systeminfo"
@@ -17,9 +20,14 @@ type OpenAIResponse struct {
 
 type Choice struct {
 	Message Message `json:"message"`
+	Delta   Delta   `json:"delta"`
 }
 
 type Message struct {
+	Content string `json:"content"`
+}
+
+type Delta struct {
 	Content string `json:"content"`
 }
 
@@ -41,7 +49,7 @@ func NewOpenAiProvider(
 	}
 }
 
-func (p *Provider) Ask(prompt string) (string, error) {
+func (p *Provider) Ask(prompt string, onFirstChunk func()) (string, error) {
 	baseUrl, err := url.Parse(fmt.Sprintf("%s/chat/completions", p.config.BaseUrl))
 	if err != nil {
 		return "", err
@@ -58,6 +66,7 @@ func (p *Provider) Ask(prompt string) (string, error) {
 		"max_tokens":  32000,
 		"temperature": 0.55,
 		"top_p":       1,
+		"stream":      true,
 		"messages": []map[string]string{
 			{
 				"role":    "system",
@@ -89,14 +98,62 @@ func (p *Provider) Ask(prompt string) (string, error) {
 		return "", fmt.Errorf("API request failed with status %d", response.StatusCode)
 	}
 
-	var resp OpenAIResponse
-	if err := json.NewDecoder(response.Body).Decode(&resp); err != nil {
+	scanner := bufio.NewScanner(response.Body)
+	var fullResponse strings.Builder
+	var allData strings.Builder
+	hasStream := false
+	called := false
+	firstContent := true
+	for scanner.Scan() {
+		line := scanner.Text()
+		allData.WriteString(line + "\n")
+		if strings.HasPrefix(line, "data: ") {
+			hasStream = true
+			data := strings.TrimPrefix(line, "data: ")
+			if data == "[DONE]" {
+				break
+			}
+			var chunk OpenAIResponse
+			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+				return "", err
+			}
+			if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
+				if !called && onFirstChunk != nil {
+					onFirstChunk()
+					called = true
+				}
+				content := chunk.Choices[0].Delta.Content
+				if firstContent {
+					fmt.Print("\n" + content)
+					firstContent = false
+				} else {
+					fmt.Print(content)
+				}
+				os.Stdout.Sync()
+				fullResponse.WriteString(content)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
 		return "", err
 	}
-
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no choices in response")
+	if !hasStream {
+		// Fallback to non-streamed response
+		var resp OpenAIResponse
+		if err := json.Unmarshal([]byte(strings.TrimSpace(allData.String())), &resp); err != nil {
+			return "", err
+		}
+		if len(resp.Choices) > 0 {
+			if onFirstChunk != nil {
+				onFirstChunk()
+			}
+			content := resp.Choices[0].Message.Content
+			fmt.Print("\n" + content)
+			os.Stdout.Sync()
+			fullResponse.WriteString(content)
+		}
 	}
-
-	return resp.Choices[0].Message.Content, nil
+	fmt.Println() // Add newline after response
+	os.Stdout.Sync()
+	return fullResponse.String(), nil
 }
