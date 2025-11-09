@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/krolR0609/q/config"
+	"github.com/krolR0609/q/internal/api"
 	"github.com/krolR0609/q/internal/api/openai"
 	"github.com/krolR0609/q/internal/httpclient"
 	"github.com/krolR0609/q/internal/services/systeminfo"
@@ -17,7 +18,7 @@ import (
 type App struct {
 	config              *config.Config
 	httpClient          *http.Client
-	ai                  *openai.Provider
+	aiWriter            api.LLMWriter
 	sysInfo             systeminfo.SystemInfoProvider
 	conversationHistory []map[string]string
 }
@@ -31,7 +32,7 @@ func NewApp(config *config.Config) *App {
 func (a *App) InitServices() {
 	a.httpClient = httpclient.NewDefaultClient(a.config)
 	a.sysInfo = systeminfo.NewBasicSystemInfoProvider()
-	a.ai = openai.NewOpenAiProvider(a.config, a.httpClient, a.sysInfo)
+	a.aiWriter = openai.NewOpenAiProvider(a.config, a.httpClient, a.sysInfo)
 }
 
 func (a *App) Run(args utils.Args) {
@@ -49,7 +50,8 @@ func (a *App) runSingleQuery(prompt string) {
 	messages := []map[string]string{
 		{"role": "user", "content": prompt},
 	}
-	_, err := a.ai.Ask(messages, func() { cancel() })
+	eventResponder := api.NewEventResponder(cancel)
+	_, err := a.aiWriter.Ask(messages, eventResponder)
 	if err != nil {
 		cancel()
 		fmt.Println(err)
@@ -75,7 +77,7 @@ func (a *App) runChatMode() {
 		}
 		// Add user message to history
 		a.conversationHistory = append(a.conversationHistory, map[string]string{"role": "user", "content": input})
-		response, err := a.ai.Ask(a.conversationHistory, nil)
+		response, err := a.aiWriter.Ask(a.conversationHistory, nil)
 		if err != nil {
 			fmt.Println("Error:", err)
 			continue

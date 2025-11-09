@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/krolR0609/q/config"
+	"github.com/krolR0609/q/internal/api"
 	"github.com/krolR0609/q/internal/services/systeminfo"
 )
 
@@ -49,7 +50,7 @@ func NewOpenAiProvider(
 	}
 }
 
-func (p *Provider) Ask(messages []map[string]string, onFirstChunk func()) (string, error) {
+func (p *Provider) Ask(messages []map[string]string, evt api.LLMEventResponder) (string, error) {
 	baseUrl, err := url.Parse(fmt.Sprintf("%s/chat/completions", p.config.BaseUrl))
 	if err != nil {
 		return "", err
@@ -116,8 +117,8 @@ func (p *Provider) Ask(messages []map[string]string, onFirstChunk func()) (strin
 				return "", err
 			}
 			if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
-				if !called && onFirstChunk != nil {
-					onFirstChunk()
+				if !called && evt != nil {
+					evt.OnFirstChunk()
 					called = true
 				}
 				content := chunk.Choices[0].Delta.Content
@@ -142,8 +143,8 @@ func (p *Provider) Ask(messages []map[string]string, onFirstChunk func()) (strin
 			return "", err
 		}
 		if len(resp.Choices) > 0 {
-			if onFirstChunk != nil {
-				onFirstChunk()
+			if evt != nil {
+				evt.OnFirstChunk()
 			}
 			content := resp.Choices[0].Message.Content
 			fmt.Print("\n" + content)
