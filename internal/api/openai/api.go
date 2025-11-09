@@ -49,7 +49,7 @@ func NewOpenAiProvider(
 	}
 }
 
-func (p *Provider) Ask(prompt string, onFirstChunk func()) (string, error) {
+func (p *Provider) Ask(messages []map[string]string, onFirstChunk func()) (string, error) {
 	baseUrl, err := url.Parse(fmt.Sprintf("%s/chat/completions", p.config.BaseUrl))
 	if err != nil {
 		return "", err
@@ -61,26 +61,24 @@ func (p *Provider) Ask(prompt string, onFirstChunk func()) (string, error) {
 		return "", err
 	}
 
+	systemMessages := []map[string]string{
+		{
+			"role":    "system",
+			"content": "You are \"q\" CLI tool which allows to query different AI tools and return the response as user wished. Return info in short form because it will be displayed in the terminal! If user asking about terminal tool or specific command return only command in the response!",
+		},
+		{
+			"role":    "system",
+			"content": fmt.Sprintf("Information about system (use it to make response more relative to the user): %s", systemInfoJson),
+		},
+	}
+
 	reqBody := map[string]interface{}{
 		"model":       p.config.Model,
 		"max_tokens":  32000,
 		"temperature": 0.55,
 		"top_p":       1,
 		"stream":      true,
-		"messages": []map[string]string{
-			{
-				"role":    "system",
-				"content": "You are \"q\" CLI tool which allows to query different AI tools and return the response as user wished. Return info in short form because it will be displayed in the terminal! If user asking about terminal tool or specific command return only command in the response!",
-			},
-			{
-				"role":    "system",
-				"content": fmt.Sprintf("Information about system (use it to make response more relative to the user): %s", systemInfoJson),
-			},
-			{
-				"role":    "user",
-				"content": prompt,
-			},
-		},
+		"messages":    append(systemMessages, messages...),
 	}
 
 	bodyBytes, err := json.Marshal(reqBody)

@@ -15,10 +15,11 @@ import (
 )
 
 type App struct {
-	config     *config.Config
-	httpClient *http.Client
-	ai         *openai.Provider
-	sysInfo    systeminfo.SystemInfoProvider
+	config              *config.Config
+	httpClient          *http.Client
+	ai                  *openai.Provider
+	sysInfo             systeminfo.SystemInfoProvider
+	conversationHistory []map[string]string
 }
 
 func NewApp(config *config.Config) *App {
@@ -45,7 +46,10 @@ func (a *App) Run(args utils.Args) {
 
 func (a *App) runSingleQuery(prompt string) {
 	cancel := utils.ShowLoader()
-	_, err := a.ai.Ask(prompt, func() { cancel() })
+	messages := []map[string]string{
+		{"role": "user", "content": prompt},
+	}
+	_, err := a.ai.Ask(messages, func() { cancel() })
 	if err != nil {
 		cancel()
 		fmt.Println(err)
@@ -54,6 +58,7 @@ func (a *App) runSingleQuery(prompt string) {
 }
 
 func (a *App) runChatMode() {
+	a.conversationHistory = []map[string]string{} // Reset history for new session
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Println("Entering chat mode. Type 'exit' to quit.")
 	for {
@@ -68,11 +73,15 @@ func (a *App) runChatMode() {
 		if input == "" {
 			continue
 		}
-		_, err := a.ai.Ask(input, nil)
+		// Add user message to history
+		a.conversationHistory = append(a.conversationHistory, map[string]string{"role": "user", "content": input})
+		response, err := a.ai.Ask(a.conversationHistory, nil)
 		if err != nil {
 			fmt.Println("Error:", err)
 			continue
 		}
+		// Add assistant response to history
+		a.conversationHistory = append(a.conversationHistory, map[string]string{"role": "assistant", "content": response})
 	}
 	if err := scanner.Err(); err != nil {
 		fmt.Println("Error reading input:", err)
