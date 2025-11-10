@@ -6,9 +6,14 @@ import (
 	"path/filepath"
 )
 
+type Options struct {
+	ApiKey string `json:"apiKey"`
+}
+
 type Config struct {
-	BaseUrl string `json:"baseUrl"`
-	Model   string `json:"model"`
+	BaseUrl string   `json:"baseUrl"`
+	Model   string   `json:"model"`
+	Options *Options `json:"options"`
 }
 
 func LoadConfig() (*Config, error) {

@@ -87,9 +87,19 @@ func (p *Provider) Ask(messages []map[string]string, evt api.LLMEventResponder) 
 		return "", err
 	}
 
-	response, err := p.httpClient.Post(baseUrl.String(), "application/json", bytes.NewReader(bodyBytes))
+	request, err := http.NewRequest("POST", baseUrl.String(), bytes.NewReader(bodyBytes))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("creating request: %w", err)
+	}
+
+	request.Header.Set("Content-Type", "application/json")
+	if p.config.Options != nil && p.config.Options.ApiKey != "" {
+		request.Header.Add("Authorization", p.config.Options.ApiKey)
+	}
+
+	response, err := p.httpClient.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("sending request: %w", err)
 	}
 	defer response.Body.Close()
 
